@@ -3,33 +3,101 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>XR Starter</title>
+  <title>XR Demo — Physics + Grab/Throw</title>
+
+  <!-- A-Frame (WebXR-ready) -->
   <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
+
+  <!-- Physics system (cannon-es under the hood) -->
+  <script src="https://cdn.jsdelivr.net/npm/aframe-physics-system@4.0.1/dist/aframe-physics-system.min.js"></script>
+
+  <!-- super-hands for grabbing/throwing with hands/controllers -->
+  <script src="https://cdn.jsdelivr.net/npm/super-hands@4.0.5/dist/super-hands.min.js"></script>
+
   <style>
-    body{margin:0;font-family:system-ui}
-    #ui{position:fixed;top:10px;left:10px;display:flex;gap:8px;z-index:10}
-    #ui button{padding:8px 12px;border:1px solid #333;border-radius:10px;background:#111;color:#fff;font-weight:600}
+    :root { --ui-bg: rgba(15,17,20,0.75); --ui-fg:#fff; --ui-bd:#2b2f36; --acc:#00e5ff; }
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    #ui{
+      position:fixed; top:10px; left:10px;
+      display:flex; gap:8px; align-items:center; z-index:9999;
+      background:var(--ui-bg); border:1px solid var(--ui-bd);
+      padding:6px; border-radius:12px; backdrop-filter: blur(6px);
+    }
+    #ui button{
+      padding:6px 10px; border-radius:10px; border:1px solid var(--ui-bd);
+      background:#111; color:#fff; font-weight:600; cursor:pointer;
+    }
+    #ui button:hover{ border-color:#555; }
+    #hint{
+      position:fixed; top:10px; right:10px; z-index:9999;
+      background:var(--ui-bg); color:#ddd; border:1px solid var(--ui-bd);
+      padding:6px 10px; border-radius:12px; font-size:12px;
+    }
   </style>
 </head>
 <body>
+  <!-- Compact UI toolbar (top-left) -->
   <div id="ui">
-    <button onclick="document.querySelector('a-scene').enterVR()">Enter VR</button>
-    <button onclick="document.querySelector('a-scene').enterAR()">Enter MR</button>
+    <button id="btnVR">Enter VR</button>
+    <button id="btnAR">Enter MR</button>
+    <span style="width:1px;height:20px;background:#333;margin:0 4px;"></span>
+    <button id="spawnCube">+ Cube</button>
+    <button id="spawnSphere">+ Sphere</button>
   </div>
+  <div id="hint">Grab with hands/controllers • Throw to stack • Use MR or VR</div>
 
-  <a-scene renderer="antialias:true;colorManagement:true"
-           webxr="optionalFeatures: hit-test, dom-overlay, local-floor; overlayElement: #ui">
-    <a-entity position="0 1.6 3">
-      <a-entity camera look-controls></a-entity>
+  <!-- Scene -->
+  <a-scene
+    renderer="antialias:true; colorManagement:true; physicallyCorrectLights:true"
+    physics="driver: cannon; gravity: -9.8;"
+    webxr="optionalFeatures: hit-test, dom-overlay, local-floor, bounded-floor; overlayElement: #ui">
+
+    <!-- Camera rig -->
+    <a-entity id="rig" position="0 1.6 2">
+      <a-entity id="camera" camera look-controls></a-entity>
     </a-entity>
 
-    <a-box position="0 1 -2" depth="0.5" height="0.5" width="0.5"
-           color="#FF9F1C" animation="property: rotation; to: 0 360 0; loop: true; dur: 6000"></a-box>
+    <!-- HANDS (Quest hand-tracking) -->
+    <a-entity id="leftHand"
+              hand-tracking-controls="hand: left"
+              super-hands
+              sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
+    <a-entity id="rightHand"
+              hand-tracking-controls="hand: right"
+              super-hands
+              sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
 
-    <a-plane rotation="-90 0 0" width="10" height="10" color="#0b0d10"></a-plane>
+    <!-- CONTROLLERS (for when hand-tracking is off) -->
+    <a-entity oculus-touch-controls="hand: left"
+              super-hands
+              sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
+    <a-entity oculus-touch-controls="hand: right"
+              super-hands
+              sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
 
+    <!-- Lights -->
     <a-entity light="type: hemisphere; intensity: 1.0"></a-entity>
-    <a-entity light="type: directional; intensity: 0.8" position="1 3 1"></a-entity>
+    <a-entity light="type: directional; intensity: 0.9" position="1 3 1"></a-entity>
+
+    <!-- Floor (large, static) -->
+    <a-plane rotation="-90 0 0" width="40" height="40" color="#0b0d10"
+             static-body></a-plane>
+
+    <!-- A starter stack to play with -->
+    <a-box position="0 1 -1.5" depth="0.3" height="0.3" width="0.3" color="#2ec4b6"
+           class="grabbable" dynamic-body></a-box>
+    <a-box position="0.35 1.4 -1.5" depth="0.3" height="0.3" width="0.3" color="#ff9f1c"
+           class="grabbable" dynamic-body></a-box>
+    <a-sphere position="-0.35 1.8 -1.5" radius="0.18" color="#e71d36"
+              class="grabbable" dynamic-body></a-sphere>
+
+    <!-- Reticle for AR hit-test -->
+    <a-entity id="reticle" visible="false">
+      <a-ring rotation="-90 0 0" radius-inner="0.05" radius-outer="0.06" color="#00e5ff"></a-ring>
+    </a-entity>
+
   </a-scene>
+
+  <script type="module" src="app.js"></script>
 </body>
 </html>
