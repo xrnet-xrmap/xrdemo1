@@ -1,57 +1,5 @@
 const scene = document.querySelector('a-scene');
-const cam = document.querySelector('#camera');
-const btnVR = document.querySelector('#btnVR');
-const btnAR = document.querySelector('#btnAR');
-const btnCube = document.querySelector('#spawnCube');
-const btnSphere = document.querySelector('#spawnSphere');
 const reticle = document.querySelector('#reticle');
-
-// Enter VR / MR buttons
-btnVR.addEventListener('click', async () => {
-  try { await scene.enterVR(); } catch (e) { console.warn(e); }
-});
-btnAR.addEventListener('click', async () => {
-  try { await scene.enterAR(); } catch (e) { console.warn(e); }
-});
-
-// Helper: spawn position ~1m in front of camera (fallback)
-function frontOfCamera(offset = 1) {
-  const p = new THREE.Vector3(0, -0.1, -offset);
-  cam.object3D.localToWorld(p);
-  return p;
-}
-
-// Random color helper
-function randColor() {
-  const palette = ['#2ec4b6', '#ff9f1c', '#e71d36', '#ffd166', '#06d6a0', '#118ab2', '#8338ec'];
-  return palette[Math.floor(Math.random() * palette.length)];
-}
-
-// Spawn dynamic box or sphere with physics + grabbable
-function spawn(type = 'box') {
-  const el = document.createElement('a-entity');
-  if (type === 'box') {
-    el.setAttribute('geometry', 'primitive: box; depth: 0.3; height: 0.3; width: 0.3');
-  } else {
-    el.setAttribute('geometry', 'primitive: sphere; radius: 0.18');
-  }
-  el.setAttribute('material', `color: ${randColor()}`);
-  el.setAttribute('class', 'grabbable');
-  el.setAttribute('dynamic-body', 'shape: auto; mass: 1');
-
-  const pos = reticle.getAttribute('visible') ? reticle.object3D.position : frontOfCamera(1.0);
-  el.setAttribute('position', `${pos.x} ${pos.y} ${pos.z}`);
-
-  el.setAttribute('grabbable', '');
-  el.setAttribute('hoverable', '');
-  el.setAttribute('stretchable', '');
-  el.setAttribute('draggable', '');
-
-  scene.appendChild(el);
-}
-
-btnCube.addEventListener('click', () => spawn('box'));
-btnSphere.addEventListener('click', () => spawn('sphere'));
 
 // AR hit-test component to drive reticle placement
 AFRAME.registerComponent('ar-hit-test', {
