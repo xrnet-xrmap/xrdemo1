@@ -23,16 +23,27 @@
       background:var(--ui-bg); border:1px solid var(--ui-bd);
       padding:6px; border-radius:12px; backdrop-filter: blur(6px);
     }
-    #ui button{
+    #ui button{ 
       padding:6px 10px; border-radius:10px; border:1px solid var(--ui-bd);
       background:#111; color:#fff; font-weight:600; cursor:pointer;
     }
     #ui button:hover{ border-color:#555; }
-    #hint{
-      position:fixed; top:10px; right:10px; z-index:9999;
-      background:var(--ui-bg); color:#ddd; border:1px solid var(--ui-bd);
-      padding:6px 10px; border-radius:12px; font-size:12px;
+    #crosshair{
+      position:fixed;
+      left:50%;
+      top:50%;
+      transform:translate(-50%,-50%);
+      width:14px;
+      height:14px;
+      pointer-events:none;
+      z-index:9998;
+      opacity:0;
+      border:2px solid var(--acc);
+      border-radius:50%;
+      box-shadow:0 0 10px rgba(0,229,255,.6);
+      transition:opacity 120ms ease;
     }
+    @media (any-pointer:coarse){#crosshair{display:none}}
   </style>
 </head>
 <body>
@@ -44,7 +55,8 @@
     <button id="spawnCube">+ Cube</button>
     <button id="spawnSphere">+ Sphere</button>
   </div>
-  <div id="hint">Grab with hands/controllers • Throw to stack • Use MR or VR</div>
+
+  <div id="crosshair"></div>
 
   <!-- Scene -->
   <a-scene
@@ -57,21 +69,15 @@
       <a-entity id="camera" camera look-controls></a-entity>
     </a-entity>
 
-    <!-- HANDS (Quest hand-tracking) -->
+    <!-- HANDS / CONTROLLERS -->
     <a-entity id="leftHand"
               hand-tracking-controls="hand: left"
+              oculus-touch-controls="hand: left"
               super-hands
               sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
     <a-entity id="rightHand"
               hand-tracking-controls="hand: right"
-              super-hands
-              sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
-
-    <!-- CONTROLLERS (for when hand-tracking is off) -->
-    <a-entity oculus-touch-controls="hand: left"
-              super-hands
-              sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
-    <a-entity oculus-touch-controls="hand: right"
+              oculus-touch-controls="hand: right"
               super-hands
               sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
 
@@ -97,6 +103,128 @@
     </a-entity>
 
   </a-scene>
+
+  <!-- XR helpers for desktop grab & locomotion -->
+  <script>
+  (function(){
+    const scene = document.querySelector('a-scene');
+    const rig = document.querySelector('#rig');
+    const cameraEl = document.querySelector('#camera');
+    const crosshair = document.getElementById('crosshair');
+    const leftCtrl = document.getElementById('leftHand');
+    const rightCtrl = document.getElementById('rightHand');
+    if(!scene || !rig || !cameraEl || !crosshair || !leftCtrl || !rightCtrl){
+      console.warn('XR helpers: missing element');
+      return;
+    }
+
+    // Mouse "hand" for desktop grabbing
+    let mouseHand = document.querySelector('#mouseHand');
+    if(!mouseHand){
+      mouseHand = document.createElement('a-entity');
+      mouseHand.id = 'mouseHand';
+      mouseHand.setAttribute('cursor','rayOrigin: mouse');
+      mouseHand.setAttribute('raycaster','objects: .grabbable; far: 4; interval: 0');
+      mouseHand.setAttribute('super-hands','colliderEvent: raycaster-intersection; colliderEndEvent: raycaster-intersection-cleared');
+      scene.appendChild(mouseHand);
+    }
+    mouseHand.addEventListener('raycaster-intersection', ()=> crosshair.style.opacity='1');
+    mouseHand.addEventListener('raycaster-intersection-cleared', ()=> crosshair.style.opacity='0');
+
+    // UI buttons
+    const btnVR = document.querySelector('#btnVR');
+    const btnAR = document.querySelector('#btnAR');
+    if(btnVR) btnVR.addEventListener('click', ()=>scene.enterVR().catch(console.warn));
+    if(btnAR) btnAR.addEventListener('click', ()=>scene.enterAR().catch(console.warn));
+
+    // Spawn helpers
+    function frontOfCamera(offset=1){
+      const p = new THREE.Vector3(0,-0.1,-offset);
+      cameraEl.object3D.localToWorld(p);
+      return p;
+    }
+    function randColor(){
+      const palette = ['#2ec4b6','#ff9f1c','#e71d36','#ffd166','#06d6a0','#118ab2','#8338ec'];
+      return palette[Math.floor(Math.random()*palette.length)];
+    }
+    function spawn(type='box'){
+      const el = document.createElement('a-entity');
+      if(type==='box'){ el.setAttribute('geometry','primitive: box; depth:0.3; height:0.3; width:0.3'); }
+      else            { el.setAttribute('geometry','primitive: sphere; radius:0.18'); }
+      el.setAttribute('material', 'color: '+randColor());
+      el.setAttribute('class','grabbable');
+      el.setAttribute('dynamic-body','shape: auto; mass: 1');
+      const p = frontOfCamera(1.0);
+      el.setAttribute('position', `${p.x} ${p.y} ${p.z}`);
+      el.setAttribute('grabbable',''); el.setAttribute('hoverable',''); el.setAttribute('stretchable',''); el.setAttribute('draggable','');
+      scene.appendChild(el);
+    }
+    const btnCube = document.querySelector('#spawnCube');
+    const btnSphere = document.querySelector('#spawnSphere');
+    if(btnCube)   btnCube.addEventListener('click', ()=>spawn('box'));
+    if(btnSphere) btnSphere.addEventListener('click', ()=>spawn('sphere'));
+
+    // ===== Locomotion: thumbsticks + jump/teleport + desktop keys =====
+    (function(){
+      const rigObj = rig.object3D;
+      let move = {x:0,y:0};
+      let lastSnap = 0;
+      const snapTurnDeg = 45, snapCooldownMs = 220, moveSpeed = 1.6;
+
+      function camForwardXZ(out){ out=out||new THREE.Vector3(); cameraEl.object3D.getWorldDirection(out); out.y=0; return out.normalize(); }
+      function camRightXZ(out){ out=out||new THREE.Vector3(); camForwardXZ(out); out.applyAxisAngle(new THREE.Vector3(0,1,0), Math.PI/2); return out; }
+
+      leftCtrl.addEventListener('thumbstickmoved', e => { move.x=e.detail.x||0; move.y=e.detail.y||0; });
+
+      rightCtrl.addEventListener('thumbstickmoved', e => {
+        const x = e.detail.x||0, now = performance.now();
+        if (Math.abs(x)>0.6 && (now-lastSnap)>snapCooldownMs){
+          const sign = (x>0)? -1 : 1;
+          rigObj.rotation.y += THREE.MathUtils.degToRad(sign*snapTurnDeg);
+          lastSnap = now;
+        }
+      });
+
+      const jumpUp = 0.6, jumpDur = 220;
+      function doJump(){
+        const baseY = 1.6, start = performance.now();
+        function up(){ const t=(performance.now()-start)/jumpDur; if(t<1){ rigObj.position.y = baseY + jumpUp*t; requestAnimationFrame(up);} else { const s2=performance.now(); down(s2);} }
+        function down(s2){ const td=(performance.now()-s2)/(jumpDur*1.2); if(td<1){ rigObj.position.y = baseY + jumpUp*(1-td); requestAnimationFrame(()=>down(s2)); } else { rigObj.position.y = baseY; } }
+        up();
+      }
+      rightCtrl.addEventListener('abuttondown', doJump);
+      rightCtrl.addEventListener('xbuttondown', doJump);
+      window.addEventListener('keydown', e=>{ if(e.code==='Space'){ e.preventDefault(); doJump(); } });
+
+      function teleportForward(dist=2){
+        const fwd = camForwardXZ(new THREE.Vector3());
+        const target = new THREE.Vector3().copy(rigObj.position).addScaledVector(fwd, dist);
+        target.y = rigObj.position.y; rigObj.position.copy(target);
+      }
+      rightCtrl.addEventListener('bbuttondown', ()=>teleportForward(2));
+      window.addEventListener('keydown', e=>{ if(e.key==='t'||e.key==='T'){ teleportForward(2); } });
+
+      scene.addEventListener('loaded', ()=>{
+        scene.addEventListener('render-target-loaded', ()=>{
+          scene.renderer.setAnimationLoop(()=>{
+            if (Math.abs(move.x)>0.05 || Math.abs(move.y)>0.05){
+              const dt = scene.clock ? scene.clock.getDelta() : 1/90;
+              const fwd = camForwardXZ(new THREE.Vector3());
+              const right = camRightXZ(new THREE.Vector3());
+              const disp = new THREE.Vector3();
+              disp.addScaledVector(fwd, -move.y * moveSpeed * dt);
+              disp.addScaledVector(right,  move.x * moveSpeed * dt);
+              rigObj.position.add(disp);
+            }
+          });
+        });
+      });
+    })();
+    // ===== /Locomotion =====
+
+  })();
+  </script>
+  <!-- XR helpers end -->
 
   <script type="module" src="app.js"></script>
 </body>
