@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <!-- XRNET BUILD: full movement + physics + desktop/quest parity -->
+  <!-- XRNET BUILD STAMP: v2-compact -->
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>XR Demo — Physics + Desktop & Quest Locomotion</title>
@@ -10,112 +10,80 @@
   <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
   <!-- Physics (cannon-es) -->
   <script src="https://cdn.jsdelivr.net/npm/aframe-physics-system@4.0.1/dist/aframe-physics-system.min.js"></script>
-  <!-- super-hands (grab/throw with hands/controllers/mouse-ray) -->
+  <!-- super-hands -->
   <script src="https://cdn.jsdelivr.net/npm/super-hands@4.0.5/dist/super-hands.min.js"></script>
 
   <style>
-    :root { --ui-bg: rgba(15,17,20,0.75); --ui-fg:#fff; --ui-bd:#2b2f36; --acc:#00e5ff;}
-    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-    #ui{
-      position:fixed; top:10px; left:10px;
-      display:flex; gap:8px; align-items:center; z-index:9999;
-      background:var(--ui-bg); border:1px solid var(--ui-bd);
-      padding:6px; border-radius:12px; backdrop-filter: blur(6px);
-    }
-    #ui button{
-      padding:6px 10px; border-radius:10px; border:1px solid var(--ui-bd);
-      background:#111; color:#fff; font-weight:600; cursor:pointer;
-    }
-    #ui button:hover{ border-color:#555; }
-    #hint{
-      position:fixed; top:10px; right:10px; z-index:9999;
-      background:var(--ui-bg); color:#ddd; border:1px solid var(--ui-bd);
-      padding:6px 10px; border-radius:12px; font-size:12px;
-    }
-    /* Desktop crosshair when the mouse ray hits a grabbable */
-    #crosshair {
-      position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
-      width: 14px; height: 14px; pointer-events: none; z-index: 9998; opacity: 0.0;
-      border: 2px solid #00e5ff; border-radius: 50%;
-      box-shadow: 0 0 10px rgba(0,229,255,0.6);
-      transition: opacity 120ms ease;
-    }
-    @media (any-pointer: coarse) { #crosshair { display:none; } } /* hide on headset/touch */
+    :root { --ui-bg: rgba(15,17,20,0.85); --ui-fg:#fff; --ui-bd:#2b2f36; --acc:#00e5ff;}
+    * { box-sizing: border-box; }
+    html, body { margin:0; height:100%; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; overflow: hidden; }
+    #hud{position:fixed;top:10px;left:10px;z-index:10000;display:flex;align-items:center;gap:10px;background:var(--ui-bg);color:var(--ui-fg);border:1px solid var(--ui-bd);padding:6px 8px;border-radius:12px;backdrop-filter:blur(6px);pointer-events:auto}
+    #hud .logo{height:22px;width:auto;display:block}
+    #ui{display:flex;align-items:center;gap:8px}
+    #ui button{padding:6px 10px;border-radius:10px;border:1px solid var(--ui-bd);background:#111;color:#fff;font-weight:600;cursor:pointer;white-space:nowrap}
+    #ui button:hover{border-color:#555}
+    #divider{width:1px;height:20px;background:#333;margin:0 2px}
+    #hint{position:fixed;top:10px;right:10px;z-index:10000;background:var(--ui-bg);color:#ddd;border:1px solid var(--ui-bd);padding:6px 10px;border-radius:12px;font-size:12px;pointer-events:none}
+    #crosshair{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;pointer-events:none;z-index:9999;opacity:0;border:2px solid var(--acc);border-radius:50%;box-shadow:0 0 10px rgba(0,229,255,.6);transition:opacity 120ms ease}
+    @media (any-pointer:coarse){#crosshair{display:none}}
   </style>
 </head>
 <body>
-  <!-- Compact UI toolbar -->
-  <div id="ui">
-    <button id="btnVR">Enter VR</button>
-    <button id="btnAR">Enter MR</button>
-    <span style="width:1px;height:20px;background:#333;margin:0 4px;"></span>
-    <button id="spawnCube">+ Cube</button>
-    <button id="spawnSphere">+ Sphere</button>
+  <div id="hud">
+    <!-- Inline SVG logo (replace later if you want) -->
+    <svg class="logo" viewBox="0 0 64 24" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="24" rx="6" fill="#111"/><text x="10" y="16" font-size="12" fill="#00e5ff" font-family="Arial, Helvetica, sans-serif">XRNET</text></svg>
+    <div id="ui">
+      <button id="btnVR">Enter VR</button>
+      <button id="btnAR">Enter MR</button>
+      <div id="divider"></div>
+      <button id="spawnCube">+ Cube</button>
+      <button id="spawnSphere">+ Sphere</button>
+    </div>
   </div>
+
   <div id="hint">
-    Desktop: WASD/Arrows walk • Mouse hold to grab • Space=Jump • T=Teleport<br/>
-    Quest: Left stick move • Right stick snap-turn • A/X=Jump • B=Teleport
+    Desktop: WASD/Arrows walk • Mouse hold to grab • <b>Right-click</b> to teleport • Space=Jump • T=Teleport<br/>
+    Quest: Left stick move • Right stick snap-turn • A/X=Jump • B=Teleport • <b>Left X/Y</b>=spawn cube/sphere
   </div>
   <div id="crosshair"></div>
 
-  <!-- Scene -->
   <a-scene
     renderer="antialias:true; colorManagement:true; physicallyCorrectLights:true"
     physics="driver: cannon; gravity: -9.8;"
-    webxr="optionalFeatures: hit-test, dom-overlay, local-floor, bounded-floor; overlayElement: #ui">
+    webxr="optionalFeatures: hit-test, dom-overlay, local-floor, bounded-floor; overlayElement: #hud">
 
-    <!-- Camera rig (WASD + look-controls for desktop) -->
     <a-entity id="rig" position="0 1.6 2">
       <a-entity id="camera"
                 camera
-                look-controls="pointerLockEnabled: false; reverseMouseDrag: false"
+                look-controls="pointerLockEnabled:false; reverseMouseDrag:false"
                 wasd-controls="acceleration: 10; fly: false">
       </a-entity>
     </a-entity>
 
-    <!-- HANDS (Quest hand-tracking) -->
-    <a-entity id="leftHand"
-              hand-tracking-controls="hand: left"
-              super-hands
-              sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
-    <a-entity id="rightHand"
-              hand-tracking-controls="hand: right"
-              super-hands
-              sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
+    <a-entity id="leftHand"  hand-tracking-controls="hand: left"  super-hands sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
+    <a-entity id="rightHand" hand-tracking-controls="hand: right" super-hands sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
 
-    <!-- CONTROLLERS (Quest Touch) -->
-    <a-entity id="leftCtrl"  oculus-touch-controls="hand: left"
-              super-hands sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
-    <a-entity id="rightCtrl" oculus-touch-controls="hand: right"
-              super-hands sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
+    <a-entity id="leftCtrl"  oculus-touch-controls="hand: left"  super-hands sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
+    <a-entity id="rightCtrl" oculus-touch-controls="hand: right" super-hands sphere-collider="objects: .grabbable; radius: 0.06"></a-entity>
 
-    <!-- MOUSE HAND (desktop: ray to grab/throw) -->
     <a-entity id="mouseHand"
-              cursor="rayOrigin: mouse"
-              raycaster="objects: .grabbable; far: 4; interval: 0"
-              super-hands="colliderEvent: raycaster-intersection; colliderEndEvent: raycaster-intersection-cleared">
+      cursor="rayOrigin: mouse"
+      raycaster="objects: .grabbable; far: 5; interval: 0"
+      super-hands="colliderEvent: raycaster-intersection; colliderEndEvent: raycaster-intersection-cleared; grabStartButtons: mousedown; grabEndButtons: mouseup">
     </a-entity>
 
-    <!-- Lights -->
     <a-entity light="type: hemisphere; intensity: 1.0"></a-entity>
     <a-entity light="type: directional; intensity: 0.9" position="1 3 1"></a-entity>
 
-    <!-- Floor (teleportable target) -->
-    <a-plane class="teleportable" rotation="-90 0 0" width="60" height="60" color="#0b0d10"
-             static-body></a-plane>
+    <a-plane id="ground" class="teleportable" rotation="-90 0 0" width="80" height="80" color="#0b0d10" static-body></a-plane>
 
-    <!-- Starter stack -->
-    <a-box position="0 1 -1.5" depth="0.3" height="0.3" width="0.3" color="#2ec4b6"
-           class="grabbable" dynamic-body></a-box>
-    <a-box position="0.35 1.4 -1.5" depth="0.3" height="0.3" width="0.3" color="#ff9f1c"
-           class="grabbable" dynamic-body></a-box>
-    <a-sphere position="-0.35 1.8 -1.5" radius="0.18" color="#e71d36"
-              class="grabbable" dynamic-body></a-sphere>
-
+    <a-box position="0 1 -1.5" depth="0.3" height="0.3" width="0.3" color="#2ec4b6"  class="grabbable" dynamic-body></a-box>
+    <a-box position="0.35 1.4 -1.5" depth="0.3" height="0.3" width="0.3" color="#ff9f1c" class="grabbable" dynamic-body></a-box>
+    <a-sphere position="-0.35 1.8 -1.5" radius="0.18" color="#e71d36" class="grabbable" dynamic-body></a-sphere>
   </a-scene>
 
   <script>
-    // ===== UI hooks =====
     const scene = document.querySelector('a-scene');
     const btnVR = document.querySelector('#btnVR');
     const btnAR = document.querySelector('#btnAR');
@@ -123,142 +91,99 @@
     const btnSphere = document.querySelector('#spawnSphere');
     const crosshair = document.querySelector('#crosshair');
 
-    btnVR.addEventListener('click', async () => { try { await scene.enterVR(); } catch(e) { console.warn(e); } });
-    btnAR.addEventListener('click', async () => { try { await scene.enterAR(); } catch(e) { console.warn(e); } });
+    btnVR.addEventListener('click', ()=>scene.enterVR().catch(console.warn));
+    btnAR.addEventListener('click', ()=>scene.enterAR().catch(console.warn));
 
-    // ===== helpers =====
-    function frontOfCamera(offset = 1){
-      const p = new THREE.Vector3(0, -0.1, -offset);
-      scene.camera.el.object3D.localToWorld(p);
-      return p;
-    }
-    function randColor(){
-      const palette = ['#2ec4b6','#ff9f1c','#e71d36','#ffd166','#06d6a0','#118ab2','#8338ec'];
-      return palette[Math.floor(Math.random()*palette.length)];
-    }
+    function frontOfCamera(offset=1){ const p=new THREE.Vector3(0,-0.1,-offset); scene.camera.el.object3D.localToWorld(p); return p; }
+    function randColor(){ const palette=['#2ec4b6','#ff9f1c','#e71d36','#ffd166','#06d6a0','#118ab2','#8338ec']; return palette[Math.floor(Math.random()*palette.length)]; }
     function spawn(type='box'){
-      const el = document.createElement('a-entity');
-      if(type === 'box'){
-        el.setAttribute('geometry','primitive: box; depth: 0.3; height: 0.3; width: 0.3');
-      } else {
-        el.setAttribute('geometry','primitive: sphere; radius: 0.18');
-      }
-      el.setAttribute('material', `color: ${randColor()}`);
+      const el=document.createElement('a-entity');
+      if(type==='box'){ el.setAttribute('geometry','primitive: box; depth:0.3; height:0.3; width:0.3'); }
+      else            { el.setAttribute('geometry','primitive: sphere; radius:0.18'); }
+      el.setAttribute('material','color:'+randColor());
       el.setAttribute('class','grabbable');
-      el.setAttribute('dynamic-body','shape: auto; mass: 1');
-
-      const p = frontOfCamera(1.0);
-      el.setAttribute('position', `${p.x} ${p.y} ${p.z}`);
-
-      // super-hands affordances
-      el.setAttribute('grabbable','');
-      el.setAttribute('hoverable','');
-      el.setAttribute('stretchable','');
-      el.setAttribute('draggable','');
-
+      el.setAttribute('dynamic-body','shape:auto; mass:1');
+      const p=frontOfCamera(1.0); el.setAttribute('position',`${p.x} ${p.y} ${p.z}`);
+      el.setAttribute('grabbable',''); el.setAttribute('hoverable',''); el.setAttribute('stretchable',''); el.setAttribute('draggable','');
       scene.appendChild(el);
     }
-    btnCube.addEventListener('click', () => spawn('box'));
-    btnSphere.addEventListener('click', () => spawn('sphere'));
+    btnCube.addEventListener('click', ()=>spawn('box'));
+    btnSphere.addEventListener('click', ()=>spawn('sphere'));
 
-    // Desktop crosshair when mouse ray hits a grabbable
-    const mouseHand = document.querySelector('#mouseHand');
-    mouseHand.addEventListener('raycaster-intersection', () => { crosshair.style.opacity = '1.0'; });
-    mouseHand.addEventListener('raycaster-intersection-cleared', () => { crosshair.style.opacity = '0.0'; });
+    const mouseHand=document.querySelector('#mouseHand');
+    mouseHand.addEventListener('raycaster-intersection', ()=>crosshair.style.opacity='1');
+    mouseHand.addEventListener('raycaster-intersection-cleared', ()=>crosshair.style.opacity='0');
 
-    // ===== Locomotion: Quest sticks + desktop jump/teleport =====
+    // Right-click click-to-teleport (desktop) to exact floor hit
+    window.addEventListener('contextmenu', e=>e.preventDefault());
+    const mouseTele=document.createElement('a-entity');
+    mouseTele.setAttribute('raycaster','objects: .teleportable; far: 50; interval: 0');
+    mouseTele.setAttribute('cursor','rayOrigin: mouse');
+    scene.appendChild(mouseTele);
+    function teleportToIntersection(){
+      const ground=document.querySelector('.teleportable');
+      const inter=mouseTele.components.raycaster.getIntersection(ground);
+      if(!inter) return;
+      const rig=document.querySelector('#rig').object3D;
+      rig.position.x=inter.point.x; rig.position.z=inter.point.z;
+    }
+    window.addEventListener('mousedown',e=>{ if(e.button===2) teleportToIntersection(); });
+    window.addEventListener('keydown',e=>{ if(e.key==='t'||e.key==='T') teleportToIntersection(); });
+
+    // Quest locomotion + spawn in VR
     (function(){
-      const rig = document.querySelector('#rig');
-      const rigObj = rig.object3D;
-      const cameraEl = document.querySelector('#camera');
-      const leftCtrl  = document.querySelector('#leftCtrl');
-      const rightCtrl = document.querySelector('#rightCtrl');
+      const rigObj=document.querySelector('#rig').object3D;
+      const cameraEl=document.querySelector('#camera');
+      const leftCtrl=document.querySelector('#leftCtrl');
+      const rightCtrl=document.querySelector('#rightCtrl');
 
-      let move = {x:0, y:0};                 // left stick: x=strafe, y=forward/back
-      let lastSnap = 0;
-      const snapTurnDeg = 45;
-      const snapCooldownMs = 220;
-      const moveSpeed = 1.6;                 // m/s
+      let move={x:0,y:0}, lastSnap=0;
+      const moveSpeed=1.6, snapTurnDeg=45, snapCooldownMs=220;
 
-      function camForwardXZ(out){
-        out = out || new THREE.Vector3();
-        cameraEl.object3D.getWorldDirection(out);
-        out.y = 0; return out.normalize();
-      }
-      function camRightXZ(out){
-        out = out || new THREE.Vector3();
-        camForwardXZ(out);
-        out.applyAxisAngle(new THREE.Vector3(0,1,0), Math.PI/2);
-        return out;
-      }
+      function camForwardXZ(out){ out=out||new THREE.Vector3(); cameraEl.object3D.getWorldDirection(out); out.y=0; return out.normalize(); }
+      function camRightXZ(out){ out=out||new THREE.Vector3(); camForwardXZ(out); out.applyAxisAngle(new THREE.Vector3(0,1,0),Math.PI/2); return out; }
 
-      // Left stick = smooth locomotion
-      leftCtrl && leftCtrl.addEventListener('thumbstickmoved', (e)=>{
-        move.x = e.detail.x || 0;
-        move.y = e.detail.y || 0;
-      });
+      leftCtrl && leftCtrl.addEventListener('thumbstickmoved',e=>{ move.x=e.detail.x||0; move.y=e.detail.y||0; });
 
-      // Right stick = snap turn
-      rightCtrl && rightCtrl.addEventListener('thumbstickmoved', (e)=>{
-        const x = e.detail.x || 0;
-        const now = performance.now();
-        if (Math.abs(x) > 0.6 && (now - lastSnap) > snapCooldownMs) {
-          const sign = (x > 0) ? -1 : 1; // right = turn right
-          rigObj.rotation.y += THREE.MathUtils.degToRad(sign * snapTurnDeg);
-          lastSnap = now;
+      rightCtrl && rightCtrl.addEventListener('thumbstickmoved',e=>{
+        const x=e.detail.x||0, now=performance.now();
+        if(Math.abs(x)>0.6 && (now-lastSnap)>snapCooldownMs){
+          const sign=(x>0)?-1:1; rigObj.rotation.y += THREE.MathUtils.degToRad(sign*snapTurnDeg); lastSnap=now;
         }
       });
 
-      // Jump (A/X on controller; Space on desktop)
-      const jumpUp = 0.6, jumpDur = 220; // meters, ms
+      const jumpUp=0.6, jumpDur=220;
       function doJump(){
-        const baseY = 1.6, start = performance.now();
-        function up(){
-          const t = (performance.now() - start) / jumpDur;
-          if (t < 1) { rigObj.position.y = baseY + jumpUp * t; requestAnimationFrame(up); }
-          else {
-            const s2 = performance.now();
-            (function down(){
-              const td = (performance.now() - s2) / (jumpDur * 1.2);
-              if (td < 1) { rigObj.position.y = baseY + jumpUp * (1 - td); requestAnimationFrame(down); }
-              else rigObj.position.y = baseY;
-            })();
-          }
-        }
+        const baseY=1.6, start=performance.now();
+        function up(){ const t=(performance.now()-start)/jumpDur; if(t<1){ rigObj.position.y=baseY+jumpUp*t; requestAnimationFrame(up);} else { const s2=performance.now(); (function down(){ const td=(performance.now()-s2)/(jumpDur*1.2); if(td<1){ rigObj.position.y=baseY+jumpUp*(1-td); requestAnimationFrame(down);} else rigObj.position.y=baseY; })(); } }
         up();
       }
-      rightCtrl && rightCtrl.addEventListener('abuttondown', doJump);
-      rightCtrl && rightCtrl.addEventListener('xbuttondown', doJump);
-      window.addEventListener('keydown', e=>{ if(e.code==='Space'){ e.preventDefault(); doJump(); } });
+      rightCtrl && rightCtrl.addEventListener('abuttondown',doJump);
+      rightCtrl && rightCtrl.addEventListener('xbuttondown',doJump);
+      window.addEventListener('keydown',e=>{ if(e.code==='Space'){ e.preventDefault(); doJump(); } });
 
-      // Teleport forward (B on controller; T on desktop)
-      function teleportForward(dist=2){
-        const fwd = camForwardXZ(new THREE.Vector3());
-        const target = new THREE.Vector3().copy(rigObj.position).addScaledVector(fwd, dist);
-        target.y = rigObj.position.y;
-        rigObj.position.copy(target);
-      }
-      rightCtrl && rightCtrl.addEventListener('bbuttondown', ()=>teleportForward(2));
-      window.addEventListener('keydown', e=>{ if(e.key==='t'||e.key==='T'){ teleportForward(2); } });
+      function teleportForward(dist=2){ const f=camForwardXZ(new THREE.Vector3()); const t=new THREE.Vector3().copy(rigObj.position).addScaledVector(f,dist); t.y=rigObj.position.y; rigObj.position.copy(t); }
+      rightCtrl && rightCtrl.addEventListener('bbuttondown',()=>teleportForward(2));
 
-      // Apply smooth movement each frame (left stick)
+      leftCtrl && leftCtrl.addEventListener('xbuttondown',()=>spawn('box'));
+      leftCtrl && leftCtrl.addEventListener('ybuttondown',()=>spawn('sphere'));
+
       scene.addEventListener('loaded', ()=>{
         scene.addEventListener('render-target-loaded', ()=>{
           scene.renderer.setAnimationLoop(()=>{
-            if (Math.abs(move.x) > 0.05 || Math.abs(move.y) > 0.05){
-              const dt = scene.clock ? scene.clock.getDelta() : 1/90;
-              const fwd = camForwardXZ(new THREE.Vector3());
-              const right = camRightXZ(new THREE.Vector3());
-              const disp = new THREE.Vector3();
-              disp.addScaledVector(fwd, -move.y * moveSpeed * dt);
-              disp.addScaledVector(right,  move.x * moveSpeed * dt);
-              rigObj.position.add(disp);
+            if(Math.abs(move.x)>0.05 || Math.abs(move.y)>0.05){
+              const dt=scene.clock?scene.clock.getDelta():1/90;
+              const f=camForwardXZ(new THREE.Vector3());
+              const r=camRightXZ(new THREE.Vector3());
+              const d=new THREE.Vector3();
+              d.addScaledVector(f, -move.y*moveSpeed*dt);
+              d.addScaledVector(r,  move.x*moveSpeed*dt);
+              rigObj.position.add(d);
             }
           });
         });
       });
     })();
-    // ===== /Locomotion =====
   </script>
 </body>
 </html>
